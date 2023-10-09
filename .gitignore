@@ -5,3 +5,5 @@ Untitled
 config.R
 shiny.Rproj
 .Rproj.user
+.Rhistory
+shiny/.Rhistory
