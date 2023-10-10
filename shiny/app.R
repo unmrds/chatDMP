@@ -4,6 +4,7 @@ library(stringi)
 library(uuid)
 library(shinyalert)
 library(tidyr)
+library(jsonlite)
 
 # read local configuration options
 source("config.R")
@@ -18,72 +19,33 @@ shinyApp(
     tags$hr(),
     sidebarLayout(
       sidebarPanel(
-        h2("Project Information"),
-        textInput("projectTitle", "Project Title", value="Project Title"),
-        textInput("projectPI", "Project Principal Investigator", value="PI Name"),
-        textInput("projectDM", "Project Data Manager", value="Data Manager Name"),
+        h2("1. Provide DMP and Submission Content and Update Centent for Review"),
+        h3("Project Information"),
+        textInput("projectTitle", "Project Title", value=""),
+        textInput("projectPI", "Project Principal Investigator", value=""),
+        textInput("projectDM", "Project Data Manager", value=""),
         textAreaInput("projectDesc", 
                       "Project Description", 
-                      value="Short Project Description - e.g. An examiniation of the relationship between ground water level and vegetation greenness"),
+                      value=""),
         selectInput("sponsor",
                     "Sponsor Agency",
                     sponsors,
-                    selected="Institute of Museum and Library Services"),
+                    selected=""),
         dateRangeInput("projectDates",
                        "Project Dates",
                        start = Sys.Date(),
                        end = Sys.Date()+365),
         
-        h2("Additional Information"), 
+        h3("Additional Information"), 
         sliderInput("pages",
                     "Length of DMP (pages)",
                     min=1,
                     max=5,
                     value=2),
-        actionButton("submit", "Update DMP Information"),
-        
-        
-        tags$hr(),
-        h2("Information About the Data"),
-        p("You can enter information about more than one type of data/code."),
-        selectInput("dataFormat_active",
-                    "Data Format During the Project",
-                    dataFormats,
-                    selected="Structured Data - CSV"),
-        selectInput("dataVolume_active",
-                    "Data Volumne During the Project",
-                    dataVolumes,
-                    selected="1-50 GB"),
-        selectInput("dataFormat_sharing",
-                    "Data Format For Shared Data",
-                    dataFormats,
-                    selected="Structured Data - CSV"),
-        selectInput("dataVolume_sharing",
-                    "Data Volumne That Will Be Shared",
-                    dataVolumes,
-                    selected="1-50 GB"),
-        selectInput("programmingLanguage",
-                    "Programming Language for Shared Code",
-                    languages,
-                    selected="None"),
-        selectInput("targetRepository",
-                    "Target Repository",
-                    repositories,
-                    selected="Dryad"),
-        selectInput("documentationStandard",
-                    "Documentation Standard for Shared Data/Code",
-                    documentationStandards,
-                    selected="Readme file(s)"),
-        selectInput("license",
-                    "License for Shared Data/Code",
-                    licenses,
-                    selected="CC0"),
-        actionButton("addData", "Add Data"),
-        actionButton("clearData", "Clear Data"),
-        
+        #actionButton("submit", "Update DMP Information"),
         
         tags$hr(),
-        h2("Additional Model Parameters"),
+        h3("Additional Model Parameters"),
         p("Options for changing the ChatGPT prompt parameters."),
         selectInput("model",
                     "ChatGPT Model to Use",
@@ -106,18 +68,63 @@ shinyApp(
                     value=0),
         
         
+        tags$hr(),
+        h3("Information About the Data"),
+        p("You can enter information about more than one type of data/code."),
+        selectInput("dataFormat_active",
+                    "Data Format During the Project",
+                    dataFormats,
+                    selected=""),
+        selectInput("dataVolume_active",
+                    "Data Volumne During the Project",
+                    dataVolumes,
+                    selected=""),
+        selectInput("dataFormat_sharing",
+                    "Data Format For Shared Data",
+                    dataFormats,
+                    selected=""),
+        selectInput("dataVolume_sharing",
+                    "Data Volumne That Will Be Shared",
+                    dataVolumes,
+                    selected=""),
+        selectInput("programmingLanguage",
+                    "Programming Language for Shared Code",
+                    languages,
+                    selected=""),
+        selectInput("targetRepository",
+                    "Target Repository",
+                    repositories,
+                    selected="Dryad"),
+        selectInput("documentationStandard",
+                    "Documentation Standard for Shared Data/Code",
+                    documentationStandards,
+                    selected=""),
+        selectInput("license",
+                    "License for Shared Data/Code",
+                    licenses,
+                    selected=""),
+        actionButton("addData", "Add Data"),
+        #actionButton("clearData", "Clear Data"),
+        
+        
+        
       ),
       mainPanel(
-        h2("Currently active Data Management Plan"),
+        h2("2. Review Defined Submission Content Prior to Submitting for Processing"),
+        h3("Currently active Data Management Plan"),
         tableOutput(outputId = "dmp_params"),
-        h2("DMP Data Elements"),
-        tableOutput(outputId = "dmp_data")
+        h3("DMP Data Elements"),
+        tableOutput(outputId = "dmp_data"),
+        tags$hr(),
+        verbatimTextOutput(outputId = "rawData"),
+        actionButton("buildAndSubmitCompletion", "3. Build and Submit the DMP Generation Request to ChatGPT", class = "btn-lg")
       )
     )
   ),
   
   server = function(input, output, session) {
     # https://stackoverflow.com/questions/64359528/creating-a-data-frame-from-inputs-in-shiny
+    # create empty dataframes for form content
     rv <- reactiveValues(
       dmp_df = data.frame(
         ProjectTitle = character(),
@@ -127,7 +134,13 @@ shinyApp(
         Sponsor = character(),
         ProjectDates_start = character(),
         ProjectDates_end = character(),
-        Pages = character()
+        Pages = character(),
+        # ChatDMP request parameters
+        Model = character(),
+        Temp = character(),
+        PP = character(),
+        FP = character(),
+        Data = data.frame()
       ) 
     )
     dv <- reactiveValues(
@@ -142,16 +155,8 @@ shinyApp(
         License = character()
       ) 
     )
-    mv <- reactiveValues(
-      modelValues_df = data.frame(
-        Model = character(),
-        Temp = numeric(),
-        PP = numeric(),
-        FP = numeric(),
-        Completion = list()
-      )
-    )
-  
+    
+    # Update dataframes with updated content from the form
     observeEvent(input$submit, {
       rv$dmp_df <- rbind(data.frame(ProjectTitle = input$projectTitle,
                                     ProjectPI = input$projectPI,
@@ -160,7 +165,11 @@ shinyApp(
                                     Sponsor = input$sponsor,
                                     ProjectDates_start = as.character(input$projectDates[1]),
                                     ProjectDates_end = as.character(input$projectDates[2]),
-                                    Pages = as.character(input$pages)))
+                                    Pages = as.character(input$pages),
+                                    Model = input$model,
+                                    Temp = as.character(input$temp),
+                                    PP = as.character(input$pp),
+                                    FP = as.character(input$fp)))
     })
     observeEvent(input$addData, {
       dv$data_df <- rbind(dv$data_df,data.frame(DataFormatActive = input$dataFormat_active,
@@ -182,6 +191,11 @@ shinyApp(
                                                 DocumentationStandard = character(),
                                                 License = character()))
     })
+    
+    
+    
+    
+    # refresh output elements in the Main panel
     output$dmp_params <- renderTable({
       new_df <- rv$dmp_df %>% 
         pivot_longer(cols = everything(),
@@ -192,6 +206,21 @@ shinyApp(
     output$dmp_data <- renderTable({
       new_df <- dv$data_df
       new_df
+    })
+    output$rawData <- renderText({
+      temp_df <- (data.frame(ProjectTitle = input$projectTitle,
+                  ProjectPI = input$projectPI,
+                  ProjectDM = input$projectDM,
+                  ProjectDesc = input$projectDesc,
+                  Sponsor = input$sponsor,
+                  ProjectDates_start = as.character(input$projectDates[1]),
+                  ProjectDates_end = as.character(input$projectDates[2]),
+                  Pages = as.character(input$pages),
+                  Model = input$model,
+                  Temp = as.character(input$temp),
+                  PP = as.character(input$pp),
+                  FP = as.character(input$fp)))
+      prettify(toJSON(temp_df), indent = 4)
     })
   }
   

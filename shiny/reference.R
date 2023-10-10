@@ -4,7 +4,8 @@
 displayText <- "This is placeholder text until you select values from the form on the left. "
 
 # sponsor names for picklist
-sponsors <- list("Alfred P. Sloan Foundation",
+sponsors <- list("",
+                 "Alfred P. Sloan Foundation",
                  "Digital Curation Centre",
                  "Gordon and Betty Moore Foundation",
                  "Institute of Museum and Library Services",
@@ -21,7 +22,8 @@ sponsors <- list("Alfred P. Sloan Foundation",
                  "United States Geological Survey")
 
 # sponsor names used to refer to data management plans
-planNames <- list("Information Products",
+planNames <- list("",
+                  "Information Products",
                   "Data Management and Sharing Plan",
                   "Data Sharing and Management Plan",
                   "Digital Product Form",
@@ -38,7 +40,8 @@ planNames <- list("Information Products",
                   "Data Management Plan")
 
 # data format picklist values
-dataFormats <- list("Spreadsheet - Excel",
+dataFormats <- list("",
+                    "Spreadsheet - Excel",
                     "Spreadsheet - Google Sheets",
                     "Spreadsheet - Numbers",
                     "Spreadsheet - LibreOffice Calc",
@@ -78,7 +81,8 @@ dataFormats <- list("Spreadsheet - Excel",
                     "Other")
 
 # programming language picklist
-languages <- list("Python",
+languages <- list("",
+                  "Python",
                   "R",
                   "MatLab",
                   "Fortran",
@@ -88,7 +92,8 @@ languages <- list("Python",
                   "None")
 
 # repositories
-repositories <- list("Dryad",
+repositories <- list("",
+                     "Dryad",
                       "Zenodo",
                       "ICPSR",
                       "UNM Digital Repository",
@@ -96,7 +101,8 @@ repositories <- list("Dryad",
                       "Other")
 
 # documentation standards
-documentationStandards <- list("ISO 19115",
+documentationStandards <- list("",
+                               "ISO 19115",
                       "FGDC",
                       "EML",
                       "Darwin Core",
@@ -104,7 +110,8 @@ documentationStandards <- list("ISO 19115",
                       "Other")
 
 # licenses
-licenses <- list("CC0",
+licenses <- list("",
+                 "CC0",
                  "CC-BY 4.0",
                  "CC-BY-SA 4.0",
                  "CC-BY-ND 4.0",
@@ -112,7 +119,8 @@ licenses <- list("CC0",
                  "CC-BY-SA-NC 4.0",
                  "CC-BY-SA-ND-NC 4.0")
 
-dataVolumes <- list("1-100 MB",
+dataVolumes <- list("",
+                    "1-100 MB",
                     "101 MB - 1 GB",
                     "1-50 GB",
                     "51-100 GB",
