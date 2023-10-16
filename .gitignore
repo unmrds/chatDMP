@@ -8,3 +8,5 @@ shiny.Rproj
 .Rhistory
 shiny/.Rhistory
 shiny/.RData
+shiny/output/*
+!shiny/output/output.txt
