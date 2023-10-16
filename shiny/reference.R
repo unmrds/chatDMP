@@ -1,10 +1,18 @@
 #reference.R
 
+chatCompletion <- list(
+  model = "",
+  temperature = "",
+  presence_penalty = "",
+  frequency_penalty = "",
+  messages = list()
+)
+
 # Default display text in the main panel
 displayText <- "This is placeholder text until you select values from the form on the left. "
 
 # sponsor names for picklist
-sponsors <- list("",
+sponsors <- list("Generic",
                  "Alfred P. Sloan Foundation",
                  "Digital Curation Centre",
                  "Gordon and Betty Moore Foundation",
@@ -22,8 +30,8 @@ sponsors <- list("",
                  "United States Geological Survey")
 
 # sponsor names used to refer to data management plans
-planNames <- list("",
-                  "Information Products",
+planNames <- list("Data Management Plan",
+                  "Information Products Plan",
                   "Data Management and Sharing Plan",
                   "Data Sharing and Management Plan",
                   "Digital Product Form",

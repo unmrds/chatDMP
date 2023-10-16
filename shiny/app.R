@@ -5,72 +5,64 @@ library(uuid)
 library(shinyalert)
 library(tidyr)
 library(jsonlite)
+library(dplyr)
+library(lubridate)
 
 # read local configuration options
 source("config.R")
 # read reference lists for use in controls
 source("reference.R")
+# read utility functions 
+source("functions.R")
 
 
 # Define Shiny App components
 shinyApp(
   ui = fluidPage(
-    titlePanel("Build / Upload a DMP for Review"),
+    titlePanel("Build a DMP and Associated Machine Actionable JSON Version"),
     tags$hr(),
     sidebarLayout(
       sidebarPanel(
-        h2("1. Provide DMP and Submission Content and Update Centent for Review"),
-        h3("Project Information"),
-        textInput("projectTitle", "Project Title", value=""),
-        textInput("projectPI", "Project Principal Investigator", value=""),
-        textInput("projectDM", "Project Data Manager", value=""),
-        textAreaInput("projectDesc", 
-                      "Project Description", 
-                      value=""),
-        selectInput("sponsor",
-                    "Sponsor Agency",
-                    sponsors,
-                    selected=""),
-        dateRangeInput("projectDates",
-                       "Project Dates",
-                       start = Sys.Date(),
-                       end = Sys.Date()+365),
-        
-        h3("Additional Information"), 
+        h2("Provide DMP and Submission Content and Update Centent for Submission"),
+        h3("Data Management Plan Information"),
+        textInput("dmpTitle", "Data Management Plan (DMP) Title", value=""),
+        textAreaInput("dmpDescription", "DMP Description", value=""),
+        textInput("dmpContact_name", "DMP Contact Name", value=""),
+        textInput("dmpContact_orcid", "DMP Contact ORCID", value=""),
+        textInput("dmpContact_mbox", "DMP Contact Email Address", value=""),
         sliderInput("pages",
                     "Length of DMP (pages)",
                     min=1,
                     max=5,
                     value=2),
-        #actionButton("submit", "Update DMP Information"),
-        
-        tags$hr(),
-        h3("Additional Model Parameters"),
-        p("Options for changing the ChatGPT prompt parameters."),
-        selectInput("model",
-                    "ChatGPT Model to Use",
-                    models,
-                    selected="gpt-3.5-turbo"),
-        sliderInput("temp",
-                    "Temperature - ranging from more deterministic -> more random",
-                    min=0,
-                    max=2,
-                    value=1),
-        sliderInput("pp",
-                    "Presence Penalty - low to high liklihood of new topics in response",
-                    min=-2,
-                    max=2,
-                    value=0),
-        sliderInput("fp",
-                    "Frequency Penalty - high to low likelyhood of repetition",
-                    min=-2,
-                    max=2,
-                    value=0),
         
         
-        tags$hr(),
+        h3("Project Information"),
+        selectInput("sponsor",
+                    "Sponsor Agency",
+                    sponsors,
+                    selected="Generic"),
+        textInput("projectTitle", "Project Title", value=""),
+        textInput("projectPI", "Project Principal Investigator (PI)", value=""),
+        textInput("projectPI_orcid", "PI ORCID", value=""),
+        textInput("projectPI_mbox", "PI Email Address", value=""),
+        textInput("projectDM", "Project Data Manager", value=""),
+        textInput("projectDM_orcid", "Data Manager ORCID", value=""),
+        textInput("projectDM_mbox", "Data Manager Email Address", value=""),
+        textAreaInput("projectDesc", 
+                      "Project Description", 
+                      value=""),
+        dateRangeInput("projectDates",
+                       "Project Dates",
+                       start = Sys.Date(),
+                       end = Sys.Date()+365),
+        
+        
         h3("Information About the Data"),
         p("You can enter information about more than one type of data/code."),
+        textAreaInput("dataDesc", 
+                      "Data Description", 
+                      value=""),
         selectInput("dataFormat_active",
                     "Data Format During the Project",
                     dataFormats,
@@ -94,7 +86,7 @@ shinyApp(
         selectInput("targetRepository",
                     "Target Repository",
                     repositories,
-                    selected="Dryad"),
+                    selected=""),
         selectInput("documentationStandard",
                     "Documentation Standard for Shared Data/Code",
                     documentationStandards,
@@ -103,124 +95,283 @@ shinyApp(
                     "License for Shared Data/Code",
                     licenses,
                     selected=""),
+        radioButtons("data_pii",
+                      "Do these data contain Personally Identifiable Information",
+                     list("Yes","No"),
+                     selected = "No"),
+        radioButtons("data_cui",
+                     "Do these data contain other Controlled Unclassified Information (CUI)",
+                     list("Yes","No"),
+                     selected = "No"),
+        dateInput("dataAvailableDate",
+                  "Date when the data will be made available for sharing",
+                  value = Sys.Date()
+                  ),
         actionButton("addData", "Add Data"),
-        #actionButton("clearData", "Clear Data"),
+        actionButton("clearDataItem", "Clear Last Data Item"),
+        
+        h3("DMP Generation Model Parameters"),
+        p("Options for changing the ChatGPT prompt parameters."),
+        selectInput("model",
+                    "ChatGPT Model to Use",
+                    models,
+                    selected="gpt-3.5-turbo"),
+        sliderInput("temp",
+                    "Temperature - ranging from more deterministic -> more random",
+                    min=0,
+                    max=2,
+                    value=1),
+        sliderInput("pp",
+                    "Presence Penalty - low to high liklihood of new topics in response",
+                    min=-2,
+                    max=2,
+                    value=0),
+        sliderInput("fp",
+                    "Frequency Penalty - high to low likelyhood of repetition",
+                    min=-2,
+                    max=2,
+                    value=0),
         
         
         
       ),
       mainPanel(
-        h2("2. Review Defined Submission Content Prior to Submitting for Processing"),
-        h3("Currently active Data Management Plan"),
-        tableOutput(outputId = "dmp_params"),
-        h3("DMP Data Elements"),
-        tableOutput(outputId = "dmp_data"),
-        tags$hr(),
+#        h2("2. Review Defined Submission Content Prior to Submitting for Processing"),
+#        h3("Currently active Data Management Plan"),
+#        tableOutput(outputId = "dmp_params"),
+#        h3("DMP Data Elements"),
+#        tableOutput(outputId = "dmp_data"),
+#        tags$hr(),
+        actionButton("buildAndSubmitCompletion", "Build and Submit the DMP Generation Request to ChatGPT", class = "btn-lg"),
+        h3("Metadata"),
         verbatimTextOutput(outputId = "rawData"),
-        actionButton("buildAndSubmitCompletion", "3. Build and Submit the DMP Generation Request to ChatGPT", class = "btn-lg")
+        h3("ChatGPT Response"),
+        verbatimTextOutput(outputId = "response")
       )
     )
   ),
   
   server = function(input, output, session) {
     # https://stackoverflow.com/questions/64359528/creating-a-data-frame-from-inputs-in-shiny
-    # create empty dataframes for form content
-    rv <- reactiveValues(
-      dmp_df = data.frame(
-        ProjectTitle = character(),
-        ProjectPI = character(),
-        ProjectDM = character(),
-        ProjectDesc = character(),
-        Sponsor = character(),
-        ProjectDates_start = character(),
-        ProjectDates_end = character(),
-        Pages = character(),
-        # ChatDMP request parameters
-        Model = character(),
-        Temp = character(),
-        PP = character(),
-        FP = character(),
-        Data = data.frame()
-      ) 
-    )
-    dv <- reactiveValues(
-      data_df = data.frame(
+    dmp <- reactiveVal("")
+    dmp_uuid <- reactiveVal(UUIDgenerate())
+    gptResponse <- reactiveVal("")
+    
+    data <- reactiveValues(
+      data_list = data.frame(
+        description = character(),
         DataFormatActive = character(),
         DataVolumeActive = character(),
         DataFormatSharing = character(),
         DataVolumeSharing = character(),
         ProgrammingLanguage = character(),
         TargetRepository = character(),
-        DocumentationStandard = character(),
-        License = character()
+        metadata = list(),
+        License = character(),
+        DataPII = character(),
+        DataCUI = character(),
+        DataAvailableDate = character()
       ) 
     )
     
     # Update dataframes with updated content from the form
-    observeEvent(input$submit, {
-      rv$dmp_df <- rbind(data.frame(ProjectTitle = input$projectTitle,
-                                    ProjectPI = input$projectPI,
-                                    ProjectDM = input$projectDM,
-                                    ProjectDesc = input$projectDesc,
-                                    Sponsor = input$sponsor,
-                                    ProjectDates_start = as.character(input$projectDates[1]),
-                                    ProjectDates_end = as.character(input$projectDates[2]),
-                                    Pages = as.character(input$pages),
-                                    Model = input$model,
-                                    Temp = as.character(input$temp),
-                                    PP = as.character(input$pp),
-                                    FP = as.character(input$fp)))
-    })
     observeEvent(input$addData, {
-      dv$data_df <- rbind(dv$data_df,data.frame(DataFormatActive = input$dataFormat_active,
-                                                DataVolumeActive = input$dataVolume_active,
-                                                DataFormatSharing = input$dataFormat_sharing,
-                                                DataVolumeSharing = input$dataVolume_sharing,
-                                                ProgrammingLanguage = input$programmingLanguage,
-                                                TargetRepository = input$targetRepository,
-                                                DocumentationStandard = input$documentationStandard,
-                                                License = input$license))
+      data$data_list <- rbind(data$data_list,data.frame(
+        description = input$dataDesc,                                        
+        DataFormatActive = input$dataFormat_active,
+        DataVolumeActive = input$dataVolume_active,
+        DataFormatSharing = input$dataFormat_sharing,
+        DataVolumeSharing = input$dataVolume_sharing,
+        ProgrammingLanguage = input$programmingLanguage,
+        TargetRepository = input$targetRepository,
+        metadata = input$documentationStandard,
+        License = input$license,
+        DataPII = input$data_pii,
+        DataCUI = input$data_cui,
+        DataAvailableDate = as.character(input$dataAvailableDate)))
     })
-    observeEvent(input$clearData, {
-      dv$data_df <- rbind(data.frame(DataFormatActive = character(),
-                                                DataVolumeActive = character(),
-                                                DataFormatSharing = character(),
-                                                DataVolumeSharing = character(),
-                                                ProgrammingLanguage = character(),
-                                                TargetRepository = character(),
-                                                DocumentationStandard = character(),
-                                                License = character()))
+    observeEvent(input$clearDataItem, {
+      data$data_list <- data$data_list %>% filter(row_number() <= n()-1)
     })
     
-    
-    
-    
-    # refresh output elements in the Main panel
-    output$dmp_params <- renderTable({
-      new_df <- rv$dmp_df %>% 
-        pivot_longer(cols = everything(),
-                     names_to="Parameter",
-                     values_to="Value")
-      new_df
+    observeEvent(input$buildAndSubmitCompletion, {
+      # update chat messages content for the ChatGPT request
+      chatCompletion$model <- unbox(input$model)
+      chatCompletion$temperature <- unbox(input$temp)
+      chatCompletion$presence_penalty <- unbox(input$pp)
+      chatCompletion$frequency_penalty <- unbox(input$fp)
+      
+      # rebuild messages list ##################################################
+      chatCompletion$messages[[1]] <- list(
+        "role" = unbox("system"),
+        "content" = unbox("You are an experienced researcher")
+      )
+      # sponsor
+      if (unbox(input$sponsor) != "") {
+        chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
+          "role" = unbox("user"),
+          "content" = unbox(paste("Please write a ", unbox(as.character(input$pages)), " page ", unbox(input$sponsor), " ", unbox(planNames[[match(unbox(input$sponsor), sponsors)]]), sep = ""))
+        )
+      }
+      # title
+      if (unbox(input$projectTitle) != "") {
+        chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
+          "role" = unbox("user"),
+          "content" = unbox(paste("The title of the project is '", unbox(input$projectTitle), "'", sep = ""))
+        )
+      }
+      # description
+      if (unbox(input$projectDesc) != "") {
+        chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
+          "role" = unbox("user"),
+          "content" = unbox(input$projectDesc)
+        )
+      }
+      
+      
+      # submit request #########################################################
+      print(paste("submitting request:", ymd_hms(now(tzone="UTC"))))
+      gptResponse(paste("Submitting request: ", ymd_hms(now(tzone="UTC")), "\n", sep=""))
+      #print(chatCompletion)
+      response <- create_chat_completion(
+        model = chatCompletion$model,
+        temperature = as.numeric(chatCompletion$temperature),
+        presence_penalty = as.numeric(chatCompletion$presence_penalty),
+        frequency_penalty = as.numeric(chatCompletion$frequency_penalty),
+        openai_api_key = .api_key,
+        messages = chatCompletion$messages
+      )
+      print
+      gptResponse(paste(gptResponse(), "Response received: ", ymd_hms(now(tzone="UTC")),"\n\n", sep=""))
+      gptResponse(paste(gptResponse(), "\n\n", response$choices$message.content, sep=""))
+      print(paste("Request Completed:", ymd_hms(now(tzone="UTC"))))
+      dmp(response$choices$message.content)
+      #gptResponse(response)
+      gptResponse <- response$choices$message.content
     })
-    output$dmp_data <- renderTable({
-      new_df <- dv$data_df
-      new_df
+    
+    output$response <- renderText({
+      Response <- gptResponse()
+      Response
     })
+    
     output$rawData <- renderText({
-      temp_df <- (data.frame(ProjectTitle = input$projectTitle,
-                  ProjectPI = input$projectPI,
-                  ProjectDM = input$projectDM,
-                  ProjectDesc = input$projectDesc,
-                  Sponsor = input$sponsor,
-                  ProjectDates_start = as.character(input$projectDates[1]),
-                  ProjectDates_end = as.character(input$projectDates[2]),
-                  Pages = as.character(input$pages),
-                  Model = input$model,
-                  Temp = as.character(input$temp),
-                  PP = as.character(input$pp),
-                  FP = as.character(input$fp)))
-      prettify(toJSON(temp_df), indent = 4)
+      # DMP metadata elements
+      DMPTitle = unbox(input$dmpTitle)
+      DMPDescription = unbox(input$dmpDescription)
+      DMPContactName = unbox(input$dmpContact_name)
+      DMPContactORCID = unbox(input$dmpContact_orcid)
+      DMPContactMbox = unbox(input$dmpContact_mbox)
+      DMPLength = unbox(as.character(input$pages))
+      DMPText = unbox(dmp())
+      
+      # Project metadata elements
+      ProjectTitle = unbox(input$projectTitle)
+      ProjectDesc = unbox(input$projectDesc)
+      ProjectDates_start = unbox(as.character(input$projectDates[1]))
+      ProjectDates_end = unbox(as.character(input$projectDates[2]))
+      ProjectSponsor = unbox(input$sponsor)
+      ProjectPI = unbox(input$projectPI)
+      ProjectPI_orcid = unbox(input$projectPI_orcid)
+      ProjectPI_mbox = unbox(input$projectPI_mbox)
+      ProjectDM = unbox(input$projectDM)
+      ProjectDM_orcid = unbox(input$projectDM_orcid)
+      ProjectDM_mbox = unbox(input$projectDM_mbox)
+      
+      # update chat messages content for the ChatGPT request
+      chatCompletion$model <- unbox(input$model)
+      chatCompletion$temperature <- unbox(input$temp)
+      chatCompletion$presence_penalty <- unbox(input$pp)
+      chatCompletion$frequency_penalty <- unbox(input$fp)
+      # rebuild messages list
+      chatCompletion$messages[[1]] <- list(
+        "role" = unbox("system"),
+        "content" = unbox("You are an experienced researcher")
+      )
+      # sponsor
+      if (unbox(input$sponsor) != "") {
+        chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
+          "role" = unbox("user"),
+          "content" = unbox(paste("Please write a ", unbox(as.character(input$pages)), " page ", unbox(input$sponsor), " ", unbox(planNames[[match(unbox(input$sponsor), sponsors)]]), sep = ""))
+        )
+      }
+      # title
+      if (unbox(input$projectTitle) != "") {
+        chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
+          "role" = unbox("user"),
+          "content" = unbox(paste("The title of the project is '", unbox(input$projectTitle), "'", sep = ""))
+        )
+      }
+      # description
+      if (unbox(input$projectDesc) != "") {
+        chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
+          "role" = unbox("user"),
+          "content" = unbox(input$projectDesc)
+        )
+      }
+      
+      
+      # Project metadata elements
+      temp_data_list <- data$data_list
+      output_list <- list(
+        "dmp" = list(
+          title = DMPTitle,
+          description = DMPDescription,
+          created = unbox(ymd_hms(now(tzone="UTC"))),
+          modified = unbox(ymd_hms(now(tzone="UTC"))),
+          contact = list(
+            contact_id = list(
+              identifier = DMPContactORCID,
+              type = unbox("orcid")
+            ),
+            mbox = DMPContactMbox,
+            name = DMPContactName
+          ),
+          contributor = list(
+            list(
+              name = ProjectPI,
+              mbox = ProjectPI_mbox,
+              role = "Principle Investigator",
+              contributor_id = list(
+                identifier = ProjectPI_orcid,
+                type = unbox("orcid")
+              )
+            ),
+            list(
+              name = ProjectDM,
+              mbox = ProjectDM_mbox,
+              role = "Data Manager",
+              contributor_id = list(
+                identifier = ProjectDM_orcid,
+                type = unbox("orcid")
+              )
+            )
+          ),
+          dmp_id = list(
+            identifier = unbox(dmp_uuid()),
+            type = unbox("other")
+          ),
+          project = list(
+            list(
+              title = ProjectTitle,
+              description = ProjectDesc,
+              start = ProjectDates_start,
+              end = ProjectDates_end
+            )
+          ),
+          dataset = data$data_list
+        ),
+        "dmp_text" = DMPText,
+        "generation_notes" = unbox(
+          paste("DMP generated by ChatGPT version '", unbox(input$model), "', with a Temp setting of '", unbox(input$temp), "', with a Presence Penalty of '", unbox(input$pp), "', and a Frequency Penalty of '", unbox(input$fp), "'", sep = "")
+        ),
+        "other_elements" = list(
+          sponsor = ProjectSponsor
+        ),
+        "ChatGPT_chat_completion" = chatCompletion
+      )
+      #output_list <- list("project"=unbox(temp_dmp_list), "data"=temp_data_list, "model"=unbox(temp_model_list), "plan" = dmp())
+      prettify(toJSON(output_list), indent = 4)
     })
   }
   
