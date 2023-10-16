@@ -1,0 +1,2 @@
+Placeholder file to prompt retention of the output file as part of the git repository
+All other files except this one will be ignnored by Git as defined in the .gitignore file in the top of this repository. 
