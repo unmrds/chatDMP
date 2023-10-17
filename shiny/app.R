@@ -1,4 +1,5 @@
 library(shiny)
+library(shinyjs)
 library(openai)
 library(stringi)
 library(uuid)
@@ -19,7 +20,9 @@ source("functions.R")
 # Define Shiny App components
 shinyApp(
   ui = fluidPage(
-    titlePanel("Build a DMP and Associated Machine Actionable JSON Version"),
+    useShinyjs(),
+    titlePanel("Build a DMP and an Associated Machine Actionable JSON Version"),
+    actionButton("fillSampleData", "Fill with sample content", class = "btn-lg"),
     tags$hr(),
     sidebarLayout(
       sidebarPanel(
@@ -59,7 +62,7 @@ shinyApp(
         
         
         h3("Information About the Data"),
-        p("You can enter information about more than one type of data/code."),
+        p("You can enter information about one or more types of data/code that will be produced/shared by the project."),
         textAreaInput("dataDesc", 
                       "Data Description", 
                       value=""),
@@ -143,10 +146,10 @@ shinyApp(
 #        tableOutput(outputId = "dmp_data"),
 #        tags$hr(),
         actionButton("buildAndSubmitCompletion", "Build and Submit the DMP Generation Request to ChatGPT", class = "btn-lg"),
-        h3("Metadata"),
-        verbatimTextOutput(outputId = "rawData"),
         h3("ChatGPT Response"),
-        verbatimTextOutput(outputId = "response")
+        verbatimTextOutput(outputId = "response"),
+        h3("Metadata"),
+        verbatimTextOutput(outputId = "rawData")
       )
     )
   ),
@@ -155,22 +158,24 @@ shinyApp(
     # https://stackoverflow.com/questions/64359528/creating-a-data-frame-from-inputs-in-shiny
     dmp <- reactiveVal("")
     dmp_uuid <- reactiveVal(UUIDgenerate())
-    gptResponse <- reactiveVal("")
+    session_timestamp <- reactiveVal(gsub(":","",gsub(" ","_",ymd_hms(now(tzone="UTC")))))
+    gptResponse <- reactiveVal("No DMP has been generated yet")
+    change_index <- reactiveVal(0)
     
     data <- reactiveValues(
       data_list = data.frame(
-        description = character(),
-        DataFormatActive = character(),
-        DataVolumeActive = character(),
-        DataFormatSharing = character(),
-        DataVolumeSharing = character(),
-        ProgrammingLanguage = character(),
-        TargetRepository = character(),
-        metadata = list(),
-        License = character(),
-        DataPII = character(),
-        DataCUI = character(),
-        DataAvailableDate = character()
+        description = "",
+        DataFormatActive = "",
+        DataVolumeActive = "",
+        DataFormatSharing = "",
+        DataVolumeSharing = "",
+        ProgrammingLanguage = "",
+        TargetRepository = "",
+        metadata = "",
+        License = "",
+        DataPII = "",
+        DataCUI = "",
+        DataAvailableDate = ""
       ) 
     )
     
@@ -194,6 +199,69 @@ shinyApp(
       data$data_list <- data$data_list %>% filter(row_number() <= n()-1)
     })
     
+   
+    observeEvent(input$fillSampleData, {
+      updateTextInput(session, "dmpTitle", value="Generic Data Management Plan")
+      updateTextInput(session, "dmpDescription", value="This DMP is meant as a demonstration of the AI generation process based on complete demo data") 
+      updateTextInput(session, "dmpContact_name", value="DCfirst DClast")
+      updateTextInput(session, "dmpContact_orcid", value="0000-0000-0000-0000")
+      updateTextInput(session, "dmpContact_mbox", value="dc@email.address.com")
+      
+      updateTextInput(session, "projectTitle", value="This is the title of our fascinating simulated project")
+      updateTextInput(session, "projectPI", value="PIFirst PILast")
+      updateTextInput(session, "projectPI_orcid", value="0000-0000-0000-0000")
+      updateTextInput(session, "projectPI_mbox", value="pi@email.address.com")
+      updateTextInput(session, "projectDM", value="DMFirst DMLast")
+      updateTextInput(session, "projectDM_orcid", value="0000-0000-0000-0000")
+      updateTextInput(session, "projectDM_mbox", value="dm@email.address.com")
+      updateTextInput(session, "projectDesc", value="This project will collect a wide range of data, analyze it, and produce significant outcomes.")
+      
+      data$data_list <- rbind(data$data_list,data.frame(
+        description = "The first dataset in the collection of data",                                        
+        DataFormatActive = "Spreadsheet - Excel",
+        DataVolumeActive = "1-100 MB",
+        DataFormatSharing = "Structured Data - CSV",
+        DataVolumeSharing = "1-100 MB",
+        ProgrammingLanguage = "Python",
+        TargetRepository = "Dryad",
+        metadata = "Readme file(s)",
+        License = "CC0",
+        DataPII = "No",
+        DataCUI = "Yes",
+        DataAvailableDate = as.character(Sys.Date())))
+      
+      data$data_list <- rbind(data$data_list,data.frame(
+        description = "The second dataset in the collection of data",                                        
+        DataFormatActive = "Statistical - MatLab",
+        DataVolumeActive = "1-50 GB",
+        DataFormatSharing = "Structured Data - CSV",
+        DataVolumeSharing = "1-50 GB",
+        ProgrammingLanguage = "MatLab",
+        TargetRepository = "Dryad",
+        metadata = "Readme file(s)",
+        License = "CC0",
+        DataPII = "Yes",
+        DataCUI = "No",
+        DataAvailableDate = as.character(Sys.Date())))
+      
+      data$data_list <- rbind(data$data_list,data.frame(
+        description = "The third dataset in the collection of data",                                        
+        DataFormatActive = "Geospatial - Shapefile",
+        DataVolumeActive = "1-50 GB",
+        DataFormatSharing = "Geospatial - GML",
+        DataVolumeSharing = "1-50 GB",
+        ProgrammingLanguage = "",
+        TargetRepository = "ICPSR",
+        metadata = "ISO 19115",
+        License = "CC-BY-SA-ND-NC 4.0",
+        DataPII = "No",
+        DataCUI = "No",
+        DataAvailableDate = as.character(Sys.Date())))
+      
+      print(data$data_list)
+      
+    })
+    
     observeEvent(input$buildAndSubmitCompletion, {
       # update chat messages content for the ChatGPT request
       chatCompletion$model <- unbox(input$model)
@@ -213,20 +281,44 @@ shinyApp(
           "content" = unbox(paste("Please write a ", unbox(as.character(input$pages)), " page ", unbox(input$sponsor), " ", unbox(planNames[[match(unbox(input$sponsor), sponsors)]]), sep = ""))
         )
       }
-      # title
+      # DMP title
+      if (unbox(input$dmpTitle) != "") {
+        chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
+          "role" = unbox("user"),
+          "content" = unbox(paste("The title of the data management plan is '", unbox(input$dmpTitle), "'", sep = ""))
+        )
+      }
+      ## title
       if (unbox(input$projectTitle) != "") {
         chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
           "role" = unbox("user"),
           "content" = unbox(paste("The title of the project is '", unbox(input$projectTitle), "'", sep = ""))
         )
       }
-      # description
+      ## description
       if (unbox(input$projectDesc) != "") {
         chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
           "role" = unbox("user"),
           "content" = unbox(input$projectDesc)
         )
       }
+      ## Data (process each row of the dataframe of individual dataset attributes)
+      for (row in 1:nrow(data$data_list)) {
+        if (data$data_list[row, "description"] != "") {
+          chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
+            "role" = unbox("user"),
+            "content" = paste(unbox(data$data_list[row, "description"]),". ",
+                              "The collected data will include ", unbox(data$data_list[row, "DataVolumeActive"]), " of ", unbox(data$data_list[row, "DataFormatActive"]), " data. ",
+                              unbox(data$data_list[row, "DataVolumeSharing"]), " of ", unbox(data$data_list[row, "DataFormatSharing"]), " data will be shared through the ", 
+                              unbox(data$data_list[row, "TargetRepository"]), " repository after ", unbox(data$data_list[row, "DataAvailableDate"]), ". ",
+                              "The shared data will be shared using the ", unbox(data$data_list[row, "License"]), " license ",
+                              "and documented using the ", unbox(data$data_list[row, "metadata"]), " metadata standard. ", 
+                              ifelse(unbox(data$data_list[row, "DataPII"]) == "Yes", "This dataset contains Personally Identifiable Information. ", "This dataset does not contain Personally Identifiable Information. "),
+                              ifelse(unbox(data$data_list[row, "DataCUI"]) == "Yes", "This dataset contains other Controlled Unclassified Information. ", "This dataset does not contain other Controlled Unclassified Information. "))
+          )
+        }
+      }
+      print(chatCompletion$messages)
       
       
       # submit request #########################################################
@@ -252,10 +344,13 @@ shinyApp(
     
     output$response <- renderText({
       Response <- gptResponse()
+      Response <- paste(Response, "\n\nNote: The first draft of this DMP was generated by ChatGPT version: ", unbox(input$model), " and then reviewed and revised for commpleteness and accuracy.", sep="")
       Response
     })
     
     output$rawData <- renderText({
+      ChangeIndex = change_index()
+      
       # DMP metadata elements
       DMPTitle = unbox(input$dmpTitle)
       DMPDescription = unbox(input$dmpDescription)
@@ -277,6 +372,8 @@ shinyApp(
       ProjectDM = unbox(input$projectDM)
       ProjectDM_orcid = unbox(input$projectDM_orcid)
       ProjectDM_mbox = unbox(input$projectDM_mbox)
+      
+      DataList = data$data_list
       
       # update chat messages content for the ChatGPT request
       chatCompletion$model <- unbox(input$model)
@@ -359,7 +456,7 @@ shinyApp(
               end = ProjectDates_end
             )
           ),
-          dataset = data$data_list
+          dataset = DataList
         ),
         "dmp_text" = DMPText,
         "generation_notes" = unbox(
@@ -371,7 +468,10 @@ shinyApp(
         "ChatGPT_chat_completion" = chatCompletion
       )
       #output_list <- list("project"=unbox(temp_dmp_list), "data"=temp_data_list, "model"=unbox(temp_model_list), "plan" = dmp())
-      prettify(toJSON(output_list), indent = 4)
+      outfile_name <- paste("output/",session_timestamp(),"_",dmp_uuid(),".json", sep="")
+      output_text <- prettify(toJSON(output_list), indent = 4)
+      write(output_text, outfile_name)
+      output_text
     })
   }
   
