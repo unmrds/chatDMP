@@ -162,6 +162,7 @@ shinyApp(
     gptResponse <- reactiveVal("No DMP has been generated yet")
     change_index <- reactiveVal(0)
     
+    
     data <- reactiveValues(
       data_list = data.frame(
         description = "",
@@ -381,6 +382,7 @@ shinyApp(
       chatCompletion$presence_penalty <- unbox(input$pp)
       chatCompletion$frequency_penalty <- unbox(input$fp)
       # rebuild messages list
+      # rebuild messages list ##################################################
       chatCompletion$messages[[1]] <- list(
         "role" = unbox("system"),
         "content" = unbox("You are an experienced researcher")
@@ -392,19 +394,42 @@ shinyApp(
           "content" = unbox(paste("Please write a ", unbox(as.character(input$pages)), " page ", unbox(input$sponsor), " ", unbox(planNames[[match(unbox(input$sponsor), sponsors)]]), sep = ""))
         )
       }
-      # title
+      # DMP title
+      if (unbox(input$dmpTitle) != "") {
+        chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
+          "role" = unbox("user"),
+          "content" = unbox(paste("The title of the data management plan is '", unbox(input$dmpTitle), "'", sep = ""))
+        )
+      }
+      ## title
       if (unbox(input$projectTitle) != "") {
         chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
           "role" = unbox("user"),
           "content" = unbox(paste("The title of the project is '", unbox(input$projectTitle), "'", sep = ""))
         )
       }
-      # description
+      ## description
       if (unbox(input$projectDesc) != "") {
         chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
           "role" = unbox("user"),
           "content" = unbox(input$projectDesc)
         )
+      }
+      ## Data (process each row of the dataframe of individual dataset attributes)
+      for (row in 1:nrow(data$data_list)) {
+        if (data$data_list[row, "description"] != "") {
+          chatCompletion$messages[[length(chatCompletion$messages) + 1]] <- list(
+            "role" = unbox("user"),
+            "content" = paste(unbox(data$data_list[row, "description"]),". ",
+                              "The collected data will include ", unbox(data$data_list[row, "DataVolumeActive"]), " of ", unbox(data$data_list[row, "DataFormatActive"]), " data. ",
+                              unbox(data$data_list[row, "DataVolumeSharing"]), " of ", unbox(data$data_list[row, "DataFormatSharing"]), " data will be shared through the ", 
+                              unbox(data$data_list[row, "TargetRepository"]), " repository after ", unbox(data$data_list[row, "DataAvailableDate"]), ". ",
+                              "The shared data will be shared using the ", unbox(data$data_list[row, "License"]), " license ",
+                              "and documented using the ", unbox(data$data_list[row, "metadata"]), " metadata standard. ", 
+                              ifelse(unbox(data$data_list[row, "DataPII"]) == "Yes", "This dataset contains Personally Identifiable Information. ", "This dataset does not contain Personally Identifiable Information. "),
+                              ifelse(unbox(data$data_list[row, "DataCUI"]) == "Yes", "This dataset contains other Controlled Unclassified Information. ", "This dataset does not contain other Controlled Unclassified Information. "))
+          )
+        }
       }
       
       
